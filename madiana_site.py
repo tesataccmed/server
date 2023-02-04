@@ -1,6 +1,11 @@
 from flask import Flask
 from flask import redirect, render_template, request, url_for
 from flask import session
+from flask_socketio import SocketIO, send, emit
+
+from get import stat_rec
+
+import csv
 import send_message_email
 import datetime
 
@@ -21,7 +26,6 @@ ADMIN_CONF_PHONE = 1111
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String, unique=True, nullable=False)
-    email = db.Column(db.String)
     phone = db.Column(db.Integer)
     password = db.Column(db.String)
 
@@ -39,20 +43,23 @@ def main_page():
     return redirect("/reg")
 
 @app.route("/reg", methods=['GET', 'POST'])
-def reg_page():
+@app.route("/reg/<soc>/", methods=['GET', 'POST'])
+def reg_page(soc=None):
+    if not soc is None:
+        stat_rec.set_to_media(soc)
+        return redirect('/reg')
+
     if request.method == "POST":
-        email_hole = request.form["email"]
         telephone_hole = request.form["number"]
         username_hole = request.form["username"]
         password_hole = request.form["password"]
 
-        EMAIL_CHECKER     = Client.query.filter(Client.email == email_hole).all()
         USERNAME_CHECKER  = Client.query.filter(Client.username == username_hole).all()
         TELEPHONE_CHECKER = Client.query.filter(Client.phone == telephone_hole).all()
         
-        if not EMAIL_CHECKER and not USERNAME_CHECKER and not TELEPHONE_CHECKER:
+        if not USERNAME_CHECKER and not TELEPHONE_CHECKER:
             session['name'] = username_hole
-            client = Client(email=email_hole, phone=telephone_hole, username=username_hole, password=password_hole)
+            client = Client(phone=telephone_hole, username=username_hole, password=password_hole)
             try:
                 db.session.add(client)
                 db.session.commit()
@@ -111,8 +118,17 @@ def send_email(id):
         return send_message_email.send_to_email(message_content, message_toEmail, message_subject)
 
     return "Access denied | Отказ доступа"
-    
 
+@app.route('/stat')
+def show_statistic():
+    class social_media:
+        instagram = stat_rec.get_to_media('instagram')
+        facebook = stat_rec.get_to_media('facebook')
+        telegram = stat_rec.get_to_media('telegram')
+
+    soc_objects = social_media()
+    return render_template('stat.html', soc_objects=soc_objects)
+    
 @app.route("/logout")
 def logout_page():
     if 'name' in session:
@@ -136,4 +152,4 @@ if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         set_adm()
-        app.run(host='0.0.0.0', port=8000) 
+        app.run(host='0.0.0.0', port=8000)
